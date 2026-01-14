@@ -1,0 +1,199 @@
+\documentclass[12pt, a4paper, oneside]{book}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[italian]{babel}
+\renewcommand{\familydefault}{\sfdefault}
+
+\usepackage[a4paper, margin=2.5cm]{geometry}
+
+\usepackage{xcolor}
+\definecolor{azzurrino}{HTML}{8B795E}
+\definecolor{grigiochiaro}{HTML}{F5F5F5}
+\definecolor{grigioscuro}{HTML}{424242}
+
+\usepackage[
+    colorlinks=true,
+    linkcolor=grigioscuro,
+    citecolor=azzurrino,
+    urlcolor=azzurrino
+]{hyperref}
+
+\usepackage{titlesec}
+
+\titleformat{\chapter}[display]
+  {\normalfont\Huge\bfseries\color{azzurrino}}
+  {\filleft\Huge\thechapter}
+  {0pt}
+  {\titlerule[1pt]\vspace{1ex}\filright}
+  [\vspace{1ex}\titlerule]
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{azzurrino}}{\thesection}{1em}{}
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{grigioscuro}}{\thesubsection}{1em}{}
+
+\setcounter{tocdepth}{4}
+\setcounter{secnumdepth}{4}
+
+\titleformat{\subsubsection}
+  {\normalfont\large\bfseries\color{grigioscuro}}{\thesubsubsection}{1em}{}
+
+\usepackage[font=small, labelfont={bf, color=azzurrino}]{caption}
+
+\usepackage{fancyhdr}
+\setlength{\headheight}{25pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\color{grigioscuro}\leftmark}
+\fancyhead[R]{\color{azzurrino}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{azzurrino}\leaders\hrule height \headrulewidth\hfill}}
+
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=1.5em}
+
+\usepackage{graphicx}
+\usepackage{bookmark}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage[normalem]{ulem}
+\usepackage{subcaption}
+\usepackage{soul}
+\usepackage{parskip}
+\usepackage{mdframed}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{listings, skins, breakable, theorems}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+
+\title{\Huge\bfseries \textcolor{azzurrino}{SHA256 multi-threaded client-server system} \\[1ex]
+\Large UniVR - Dipartimento di Informatica \\[1.5ex]
+\Large A.A. 2024/25}
+\author{
+\Large{Mattia Nicolis -- VR500356}
+}
+\date{}
+
+% =================================
+\begin{document}
+    \frontmatter
+    \maketitle
+    \tableofcontents
+    \thispagestyle{empty}
+    \newpage
+
+    %===========================
+    \mainmatter
+
+    % --- CAPITOLO 1 - BREVE SPIEGAZIONE DEL PROGETTO ---
+    \chapter{Introduzione}
+    Questo progetto implementa un sistema client-server per il calcolo remoto dell'hash SHA256 di un file.\\[0.2ex]
+    L'architettura è basata su Named Pipes (FIFO) per la comunicazione inter-processo (IPC) su sistemi UNIX (Linux/macOS) e utilizza il Multithreading per gestire richieste concorrenti in modo efficiente.
+
+    Il sistema include anche un meccanismo di caching per evitare di ricalcolare l'hash di file già processati e uno scheduler SJF (Shortest Job First) per dare priorità ai file più piccoli.
+
+    % --- CAPITOLO 2 - BREVE SPIEGAZIONE DELLA STRUTTURA DEL PROGETTO ---
+    \chapter{Architettura del sistema}
+    Il sistema è composto da tre componenti principali:
+    \begin{itemize}[label=$\triangleright$]
+      \item \textbf{Server (server.c)}:
+      \begin{itemize}[label=$\diamond$]
+        \item gestisce un thread pool (con numero fisso di worker)
+        \item riceve richieste tramite una FIFO pubblica (/tmp/sha256$\_$server$\_$fifo)
+        \item Mantiene una Coda di Richieste ordinata per dimensione del file (SJF)
+        \item Mantiene una Cache (Lista Linkata) degli hash calcolati per ottimizzare le prestazioni
+        \item Restituisce i risultati tramite FIFO private dedicate a ogni client
+      \end{itemize}
+      \smallskip
+      \item \textbf{Client (client.c)}:
+      \begin{itemize}[label=$\diamond$]
+        \item Prepara una richiesta contenente il percorso del file
+        \item Crea una FIFO privata univoca basata sul proprio PID
+        \item Invia la richiesta al server e si mette in attesa bloccante della risposta
+      \end{itemize}
+      \smallskip
+      \item \textbf{Monitor cache (cache$\_$query.c)}:
+      \begin{itemize}[label=$\diamond$]
+        \item Un client speciale che richiede al server lo stato attuale della cache (lista dei file processati e relativi hash)
+      \end{itemize}
+    \end{itemize}
+
+    % --- CAPITOLO 3 - BREVE SPIEGAZIONE DELLA STRUTTURA DEL CODICE ---
+    \chapter{Struttura del codice}
+    \begin{center}
+      \begin{tabular}{|c|c|}
+        \hline
+        \textbf{File} & \textbf{Descrizone}\\
+        \hline
+        src/server.c & Il cuore del sistema. Inizializza le FIFO, gestisce i thread, la coda prioritaria e la cache.\\
+      \end{tabular}
+    \end{center}
+
+    \chapter{Dettagli implementativi}
+    \textbf{Comunicazione (IPC)}
+
+    La comunicazione avviene tramite FIFO (Named Pipes).
+    \begin{itemize}
+      \item Canale di Richiesta: Il server ascolta su una FIFO nota (/tmp/sha256$\_$server$\_$fifo). Per garantire compatibilità tra macOS e Linux ed evitare loop di EOF, il server apre la FIFO in modalità O$\_$RDWR.
+  
+      \item Canale di Risposta: Ogni client crea una FIFO temporanea (es. /tmp/client$\_$1234$\_$fifo). Il server apre questa FIFO solo per il tempo necessario a scrivere la risposta.
+    \end{itemize}
+
+    \textbf{Gestione della Concorrenza}
+
+    \begin{itemize}
+      \item Mutex (pthread$\_$mutex$\_$t): Utilizzati per proteggere l'accesso alle risorse condivise: la coda delle richieste e la lista della cache.
+      \item Condition Variables (pthread$\_$cond$\_$t): Utilizzate per sincronizzare i worker thread. I worker dormono finché il main thread non segnala l'arrivo di una nuova richiesta.
+    \end{itemize}
+
+    \textbf{Scheduling e Caching}
+    \begin{itemize}
+      \item SJF (Shortest Job First): Le richieste vengono inserite nella coda in ordine crescente in base alla dimensione del file (file$\_$size). I file piccoli vengono elaborati prima.
+      \item Cache: Prima di calcolare l'hash, il worker controlla se il percorso del file è già presente in memoria. In caso di Cache Hit, il calcolo viene saltato e il risultato restituito immediatamente.
+    \end{itemize}
+
+    \chapter{Compilazione e avvio}
+    \textbf{Prerequisiti}
+    \begin{itemize}
+      \item Compilatore GCC o Clang.
+      \item CMake e Make.
+      \item Librerie OpenSSL (libssl-dev su Linux, openssl su macOS).
+    \end{itemize}
+
+    \textbf{Compilazione}
+    Eseguire i seguenti comandi dalla root del progetto:
+      mkdir build
+
+      cd build
+      
+      cmake ..
+      
+      make
+
+      \textbf{Esecuzione}
+      \begin{enumerate}
+        \item Avviare il Server In un terminale dedicato: ./server (Il server rimarrà in ascolto e stamperà i log delle operazioni.)
+        \item Eseguire un Client In un altro terminale: $\#$ Creare un file di test (opzionale)
+echo "Contenuto di prova" > test.txt
+
+$\#$ Lanciare il client
+./client test.txt (Output atteso:
+
+Richiesta inviata: test.txt (19 byte) [Calcolato] SHA256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3)
+        %\item Interrogare la Cache: ./cache_query (Mostrerà l'elenco dei file processati finora.)
+      \end{enumerate}
+
+      \chapter{Gestione di errori e casi particolari}
+      \begin{itemize}
+        \item File non trovato: Se il client richiede un file inesistente, il server lo rileva tramite access() e restituisce un codice di errore senza interrompersi.
+        \item Pulizia: Alla chiusura (CTRL+C), il server intercetta il segnale SIGINT e rimuove correttamente la FIFO pubblica.
+      \end{itemize}
+
+\end{document}
