@@ -22,13 +22,12 @@ Il sistema richiede le librerie di sviluppo **OpenSSL** per il calcolo crittogra
 
 ### 2. Compilazione
 Dalla cartella principale del progetto, eseguire i seguenti comandi per generare gli eseguibili in modo pulito.
-* 
+
     ```bash
     mkdir -p build
     cd build
     cmake ..
     make
-    ```
 
 ### 3. Esecuzione
 Il sistema richieda l'apertura di terminali separati.
