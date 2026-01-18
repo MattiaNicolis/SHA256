@@ -73,9 +73,10 @@
 \usepackage{array}
 \usepackage{tabularx}
 
-\title{\Huge\bfseries \textcolor{azzurrino}{SHA256 multi-threaded client-server system} \\[1ex]
+\title{\Huge\bfseries \textcolor{azzurrino}{SHA-256} \\[0.5ex]
+\textcolor{azzurrino}{Opzione 2: Phtread \& FIFO} \\[1ex]
 \Large UniVR - Dipartimento di Informatica \\[1.5ex]
-\Large A.A. 2024/25}
+\Large A.A. 2025/26}
 \author{
 \Large{Mattia Nicolis -- VR500356}
 }
@@ -94,106 +95,168 @@
 
     % --- CAPITOLO 1 - BREVE SPIEGAZIONE DEL PROGETTO ---
     \chapter{Introduzione}
-    Questo progetto implementa un sistema client-server per il calcolo remoto dell'hash SHA256 di un file.\\[0.2ex]
-    L'architettura è basata su Named Pipes (FIFO) per la comunicazione inter-processo (IPC) su sistemi UNIX (Linux/macOS) e utilizza il Multithreading per gestire richieste concorrenti in modo efficiente.
-
-    Il sistema include anche un meccanismo di caching per evitare di ricalcolare l'hash di file già processati e uno scheduler SJF (Shortest Job First) per dare priorità ai file più piccoli.
+    Il progetto consiste nella realizzazione di un sistema client-server per il calcolo concorrente dell'hash SHA-256.\\[0.2ex]
+    L'obiettivo principale è massimizzare il throughput tramite un'architettura multithread, garantendo al contempo l'uso efficiente delle risorse e la robustezza del sistema.
 
     % --- CAPITOLO 2 - BREVE SPIEGAZIONE DELLA STRUTTURA DEL PROGETTO ---
-    \chapter{Architettura del sistema}
-    Il sistema è composto da tre componenti principali:
+    \chapter{Architettura e specifiche implementate}
+    Il sistema è strutturato secondo un modello Master-Worker, dove un processo Server centrale gestisce le richieste provenienti da molteplici Client.
+
+    \section{Componenti principali}
+    \begin{itemize}
+      \item \textbf{main thread (dispatcher)}: è il cuore del server.
+      
+      Si occupa esclusivamente di ascoltare la FIFO pubblica, deserializzare le richieste in arrivo e inserirle nella coda condivisa (\verb|request_queue|).
+
+      \medskip
+      \item \textbf{worker threads}: thread pre-allocati (thread pool) che prelevano le richieste dalla coda. 
+      
+      Ciascun worker è responsabile della verifica in cache, dell'eventuale calcolo CPU-intensive (SHA-256), dell'aggiornamento della cache e dell'invio della risposta sulla FIFO privata del client.
+    \end{itemize}
+    
+    \section{Specifiche implementate}
+    Le specifiche principali implementate includono:
     \begin{itemize}[label=$\triangleright$]
-      \item \textbf{Server (server.c)}:
-      \begin{itemize}[label=$\diamond$]
-        \item gestisce un thread pool (con numero fisso di worker)
-        \item riceve richieste tramite una FIFO pubblica (/tmp/sha256$\_$server$\_$fifo)
-        \item Mantiene una Coda di Richieste ordinata per dimensione del file (SJF)
-        \item Mantiene una Cache (Lista Linkata) degli hash calcolati per ottimizzare le prestazioni
-        \item Restituisce i risultati tramite FIFO private dedicate a ogni client
-      \end{itemize}
+      \item \textbf{comunicazione inter-processo (IPC)}: utilizzo di una FIFO pubblica (\texttt{/tmp/sha256\_server\_fifo}) per le richieste e FIFO private univoche per le risposte, prevenendo deadlock comunicativi
+      \medskip
+      \item \textbf{gestione della concorrenza (thread pool)}: un main thread agisce da dispatcher, mentre un pool dinamico di worker threads (massimo 3) esegue i calcoli CPU-intensive
+      \medskip
+      \item \textbf{scheduling shortest job first (SJF)}: implementazione di una coda prioritaria che ordina le richieste in base alla dimensione del file, minimizzando il tempo di attesa medio
+      \medskip
+      \item \textbf{caching ($\boldsymbol{\text{O(1)}}$)}: memorizzazione dei risultati calcolati per evitare ricalcoli inutili su file già processati
+    \end{itemize}
+
+    %foto
+
+    \chapter{Scelte implementative e dettagli tecnici}
+    In questa sezione si analizzano le soluzioni adottate per soddisfare i requisiti.
+
+    \section{Gestione della concorrenza}
+    Per garantire la sicurezza dei dati (thread safety) evitando complessità eccessive e rischi di deadlock, si è scelto di utilizzare un approccio basato su un mutex globale (\verb|server_mutex|):
+    \begin{itemize}
+      \item \textbf{funzionamento}: questo singolo mutex protegge l'accesso a tutte le risorse condivise critiche: la coda delle richieste (\verb|request_queue|) e la cache dei risultati (\verb|hash_cache|)
       \smallskip
-      \item \textbf{Client (client.c)}:
-      \begin{itemize}[label=$\diamond$]
-        \item Prepara una richiesta contenente il percorso del file
-        \item Crea una FIFO privata univoca basata sul proprio PID
-        \item Invia la richiesta al server e si mette in attesa bloccante della risposta
-      \end{itemize}
+      \item \textbf{motivazione}: sebbene teoricamente meno performante di lock granulari, questa scelta semplifica drasticamente la logica di sincronizzazione, garantendo che non si verifichino mai interblocchi tra thread che tentano di accedere a risorse diverse simultaneamente
+    \end{itemize}
+
+    \section{Scheduling e priorità (SJF)}
+    Il cuore dell'ottimizzazione risiede nello scheduler. Invece di una classica coda FIFO (First-In First-Out), le richieste vengono inserite nella lista in modo ordinato in base alla dimensione del file (\verb|file_size|):
+    \begin{itemize}
+      \item \textbf{implementazione}: la funzione \verb|enqueue_request| scansiona la lista e inserisce il nuovo nodo nella posizione corretta
       \smallskip
-      \item \textbf{Monitor cache (cache$\_$query.c)}:
-      \begin{itemize}[label=$\diamond$]
-        \item Un client speciale che richiede al server lo stato attuale della cache (lista dei file processati e relativi hash)
-      \end{itemize}
+      \item \textbf{vantaggio}: questo implementa la politica Shortest Job First (SJF), assicurando che i file piccoli non rimangano bloccati dietro a file di grandi dimensioni, migliorando il tempo di risposta medio del sistema
     \end{itemize}
 
-    % --- CAPITOLO 3 - BREVE SPIEGAZIONE DELLA STRUTTURA DEL CODICE ---
-    \chapter{Struttura del codice}
-    \begin{center}
-      \begin{tabular}{|c|c|}
-        \hline
-        \textbf{File} & \textbf{Descrizone}\\
-        \hline
-        src/server.c & Il cuore del sistema. Inizializza le FIFO, gestisce i thread, la coda prioritaria e la cache.\\
-      \end{tabular}
-    \end{center}
-
-    \chapter{Dettagli implementativi}
-    \textbf{Comunicazione (IPC)}
-
-    La comunicazione avviene tramite FIFO (Named Pipes).
+    \section{Caching dei risultati}
+    Per ridurre il carico sulla CPU, è stata implementata una cache in memoria (Linked List):
     \begin{itemize}
-      \item Canale di Richiesta: Il server ascolta su una FIFO nota (/tmp/sha256$\_$server$\_$fifo). Per garantire compatibilità tra macOS e Linux ed evitare loop di EOF, il server apre la FIFO in modalità O$\_$RDWR.
-  
-      \item Canale di Risposta: Ogni client crea una FIFO temporanea (es. /tmp/client$\_$1234$\_$fifo). Il server apre questa FIFO solo per il tempo necessario a scrivere la risposta.
+      \item \textbf{funzionamento}: Prima di avviare il calcolo SHA-256, ogni worker thread controlla se il percorso del file è già presente nella lista \verb|hash_cache|
+      \smallskip
+      \item \textbf{cache hit}: se il file è stato già elaborato in precedenza, il risultato viene restituito immediatamente, riducendo il tempo di servizio da $\text{O(N)}$ (dove N è la dimensione del file) a $\text{O(1)}$ (costante)
     \end{itemize}
 
-    \textbf{Gestione della Concorrenza}
+    \chapter{Difficoltà riscontrate}
+    Durante lo sviluppo sono emerse sfide critiche legate alla natura concorrente del progetto.
 
+    \section{Sincronizzazione delle FIFO}
+    Inizialmente, il server completava il calcolo ma il client rimaneva bloccato in attesa indefinita.\\[0.2ex]
+    Il problema risiedeva nella gestione delle \verb|open()| bloccanti.\\[0.2ex]
+    È stato necessario sincronizzare l'apertura in lettura del client con l'apertura in scrittura del Server, garantendo che il canale fosse pronto prima dell'invio dei dati.
+
+    \section{Gestione dei puntatori nella coda prioritaria}
+    L'inserimento ordinato (SJF) in una lista linkata condivisa causava race conditions e corruzione della memoria.\\[0.2ex]
+    L'implementazione ha richiesto una protezione rigorosa tramite mutex durante la scansione lineare ($\text{O(N)}$) per l'inserimento in testa o nel mezzo della lista.
+
+    \section{Deadlock logici in caso di errori}
+    Se un file non esisteva, il thread terminava senza rimuovere il file dalla lista "pending", bloccando per sempre eventuali richieste future per lo stesso nome file.\\[0.2ex]
+    È stata introdotta una routine di pulizia (\verb|remove_from_pending|) che viene invocata tassativamente anche nei rami di errore (es. file non trovato)
+
+
+    \chapter{Test e risultati}
+    Il sistema è stato collaudato verificando i casi d'uso principali e la gestione degli errori.
+    
+    \section{Verifica scheduling SJF}
+    Lanciando in sequenza un file di grandi dimensioni (es. 100MB) seguito immediatamente da un file piccolo (es. 1MB), è stato verificato dai log del server che il file da 1MB viene processato e completato prima di quello più grande, confermando che la coda viene riordinata correttamente in base alla dimensione (\verb|file_size|).
+
+    \section{Verifica del caching}
+    Per verificare l'efficacia del caching, è stato effettuato un test sequenziale:
+    \begin{enumerate}
+      \item \textbf{prima richiesta}: il server calcola l'hash (tempo: proporzionale alla dimensione)
+      \smallskip
+      \item \textbf{seconda richiesta (stesso file)}: il server rileva il file nella lista \verb|hash_cache| e restituisce il risultato istantaneamente (tempo costante $\text{O(1)}$), senza rileggere il file da disco
+    \end{enumerate}
+
+    \section{Test di robustezza}
+    È stato simulato l'invio di una richiesta per un file non presente sul server:
     \begin{itemize}
-      \item Mutex (pthread$\_$mutex$\_$t): Utilizzati per proteggere l'accesso alle risorse condivise: la coda delle richieste e la lista della cache.
-      \item Condition Variables (pthread$\_$cond$\_$t): Utilizzate per sincronizzare i worker thread. I worker dormono finché il main thread non segnala l'arrivo di una nuova richiesta.
-    \end{itemize}
-
-    \textbf{Scheduling e Caching}
-    \begin{itemize}
-      \item SJF (Shortest Job First): Le richieste vengono inserite nella coda in ordine crescente in base alla dimensione del file (file$\_$size). I file piccoli vengono elaborati prima.
-      \item Cache: Prima di calcolare l'hash, il worker controlla se il percorso del file è già presente in memoria. In caso di Cache Hit, il calcolo viene saltato e il risultato restituito immediatamente.
-    \end{itemize}
-
-    \chapter{Compilazione e avvio}
-    \textbf{Prerequisiti}
-    \begin{itemize}
-      \item Compilatore GCC o Clang.
-      \item CMake e Make.
-      \item Librerie OpenSSL (libssl-dev su Linux, openssl su macOS).
-    \end{itemize}
-
-    \textbf{Compilazione}
-    Eseguire i seguenti comandi dalla root del progetto:
-      mkdir build
-
-      cd build
+      \item \textbf{comando}: \verb|./client file_fantasma.txt|
+      \item \textbf{risultato}: il server utilizza la funzione access() per verificare l'esistenza del file prima di tentare l'apertura. 
       
-      cmake ..
+      Invece di terminare in modo anomalo (crash), invia correttamente al client una stringa contenente l'errore (\verb|"ERRORE_FILE_NOT_FOUND"|), garantendo la stabilità del servizio
+    \end{itemize}
+
+    \chapter{Guida alla compilazione e avvio}
+
+    \section{Prerequisiti}
+    Il sistema richiede la presenza delle librerie OpenSSL per il calcolo dell'hash e del tool CMake per la gestione della compilazione:
+    \begin{itemize}
+      \item sistemi Debian/Ubuntu: sudo apt install libssl-dev cmake
+      \smallskip
+      \item sistemi macOS: brew install openssl cmake
+    \end{itemize}
+
+    \section{Compilazione}
+    Per garantire una compilazione pulita, è stato utilizzato CMake.
+    
+    Seguire i seguenti passaggi dalla root del progetto:
+    \begin{tcolorbox}[
+        title=Bash,
+        colback=white,
+        colframe=black,
+        fonttitle=\bfseries
+    ]
+      \verb|mkdir build|
       
-      make
+      \verb|cd build|
+      
+      \verb|cmake ..|
+      
+      \verb|make|
+    \end{tcolorbox}
 
-      \textbf{Esecuzione}
-      \begin{enumerate}
-        \item Avviare il Server In un terminale dedicato: ./server (Il server rimarrà in ascolto e stamperà i log delle operazioni.)
-        \item Eseguire un Client In un altro terminale: $\#$ Creare un file di test (opzionale)
-echo "Contenuto di prova" > test.txt
+    Al termine dell'operazione, verranno generati tre eseguibili nella cartella \verb|build/|: \verb|server|, \verb|client| e \verb|cache_query|.
 
-$\#$ Lanciare il client
-./client test.txt (Output atteso:
+    \section{Esecuzione}
+    Per un corretto funzionamento, i componenti devono essere avviati in terminali separati seguendo quest'ordine:
+    Seguire i seguenti passaggi dalla root del progetto:
+    \begin{tcolorbox}[
+        title=Bash,
+        colback=white,
+        colframe=black,
+        fonttitle=\bfseries
+    ]
+      \verb|./server|
+    \end{tcolorbox}
 
-Richiesta inviata: test.txt (19 byte) [Calcolato] SHA256: a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3)
-        %\item Interrogare la Cache: ./cache_query (Mostrerà l'elenco dei file processati finora.)
-      \end{enumerate}
+    Il server inizializzerà la FIFO pubblica e si metterà in ascolto.
 
-      \chapter{Gestione di errori e casi particolari}
-      \begin{itemize}
-        \item File non trovato: Se il client richiede un file inesistente, il server lo rileva tramite access() e restituisce un codice di errore senza interrompersi.
-        \item Pulizia: Alla chiusura (CTRL+C), il server intercetta il segnale SIGINT e rimuove correttamente la FIFO pubblica.
-      \end{itemize}
+    In un secondo terminale, lanciare il client indicando un file esistente:
+    \begin{tcolorbox}[
+        title=Bash,
+        colback=white,
+        colframe=black,
+        fonttitle=\bfseries
+    ]
+      \verb|./client| \verb|percorso/nome_file.txt|
+    \end{tcolorbox}
 
+    Per verificare lo stato della memoria interna del server:
+    \begin{tcolorbox}[
+        title=Bash,
+        colback=white,
+        colframe=black,
+        fonttitle=\bfseries
+    ]
+      \verb|./cache_query|
+    \end{tcolorbox}
 \end{document}

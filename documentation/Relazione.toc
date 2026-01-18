@@ -1,8 +1,22 @@
 \babel@toc {italian}{}\relax 
 \babel@toc {italian}{}\relax 
 \contentsline {chapter}{\numberline {1}Introduzione}{1}{chapter.1}%
-\contentsline {chapter}{\numberline {2}Architettura del sistema}{2}{chapter.2}%
-\contentsline {chapter}{\numberline {3}Struttura del codice}{3}{chapter.3}%
-\contentsline {chapter}{\numberline {4}Dettagli implementativi}{4}{chapter.4}%
-\contentsline {chapter}{\numberline {5}Compilazione e avvio}{5}{chapter.5}%
-\contentsline {chapter}{\numberline {6}Gestione di errori e casi particolari}{6}{chapter.6}%
+\contentsline {chapter}{\numberline {2}Architettura e specifiche implementate}{2}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Componenti principali}{2}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Specifiche implementate}{2}{section.2.2}%
+\contentsline {chapter}{\numberline {3}Scelte implementative e dettagli tecnici}{3}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Gestione della concorrenza}{3}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Scheduling e priorità (SJF)}{3}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Caching dei risultati}{3}{section.3.3}%
+\contentsline {chapter}{\numberline {4}Difficoltà riscontrate}{5}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Sincronizzazione delle FIFO}{5}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Gestione dei puntatori nella coda prioritaria}{5}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Deadlock logici in caso di errori}{5}{section.4.3}%
+\contentsline {chapter}{\numberline {5}Test e risultati}{6}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Verifica scheduling SJF}{6}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Verifica del caching}{6}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Test di robustezza}{6}{section.5.3}%
+\contentsline {chapter}{\numberline {6}Guida alla compilazione e avvio}{7}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Prerequisiti}{7}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Compilazione}{7}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Esecuzione}{7}{section.6.3}%
