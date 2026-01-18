@@ -21,11 +21,32 @@ Il sistema richiede le librerie di sviluppo **OpenSSL** per il calcolo crittogra
     ```
 
 ### 2. Compilazione
-Dalla cartella principale del progetto, eseguire i seguenti comandi per generare gli eseguibili in modo pulito:
-
+Dalla cartella principale del progetto, eseguire i seguenti comandi per generare gli eseguibili in modo pulito.
+* 
     ```bash
     mkdir -p build
     cd build
     cmake ..
     make
     ```
+
+### 3. Esecuzione
+Il sistema richieda l'apertura di terminali separati.
+
+* **Terminale 1: avvio del server**
+    ```bash
+    ./server
+    ```
+* **Terminale 2: invio richiesta**
+    ```bash
+    ./client <path/nome_file>
+    ``` 
+
+* **Terminale 3 (opzionale): query cache**
+    ``` bash
+    ./cache_query
+    ```
+
+### 4. Chiusura e Pulizia
+* Per fermare il server: Premere `CTRL+C` nel terminale del server.
+* Per pulire i file temporanei: `rm -rf build`
